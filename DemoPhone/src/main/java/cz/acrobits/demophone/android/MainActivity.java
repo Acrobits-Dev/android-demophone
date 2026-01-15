@@ -28,7 +28,6 @@ import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
-
 import com.bumptech.glide.Glide;
 import com.google.firebase.FirebaseApp;
 import java.util.Locale;
@@ -352,14 +351,15 @@ public class MainActivity
 
         ImageView assetRequestExampleImageView = findViewById(R.id.asset_request_example);
         GlideImageAssetLoaderExtKt
-                .loadImageAsset(Glide.with(assetRequestExampleImageView).asBitmap(), assetRequest)
+                .asImageAsset(Glide.with(assetRequestExampleImageView))
+                .load(assetRequest)
                 .into(assetRequestExampleImageView);
 
         /* I Kotlin this would be:
             Glide
                 .with(imageView)
-                .asBitmap()
-                .loadImageAsset(assetRequest)
+                .asImageAsset()
+                .load(assetRequest)
                 .into(imageView)
          */
     }

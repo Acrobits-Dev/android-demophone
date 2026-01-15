@@ -5,7 +5,6 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
-import android.graphics.Bitmap
 import android.graphics.drawable.Drawable
 import android.os.Build
 import android.os.Bundle
@@ -14,23 +13,22 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.Person
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.drawable.IconCompat
+import androidx.core.graphics.drawable.toBitmap
 import com.bumptech.glide.Glide
 import com.bumptech.glide.request.target.CustomTarget
 import com.bumptech.glide.request.transition.Transition
 import cz.acrobits.demophone.android.MainActivity
 import cz.acrobits.demophone.android.R
 import cz.acrobits.libsoftphone.Instance
+import cz.acrobits.libsoftphone.assets.toImageAssetDescriptor
 import cz.acrobits.libsoftphone.contacts.ContactSource
 import cz.acrobits.libsoftphone.data.Call
 import cz.acrobits.libsoftphone.data.ResolvedPeerAddress
 import cz.acrobits.libsoftphone.event.CallEvent
-import cz.acrobits.libsoftphone.event.Event
-import cz.acrobits.libsoftphone.event.RemoteUser
-import cz.acrobits.libsoftphone.glide.loadImageAsset
+import cz.acrobits.libsoftphone.glide.asImageAsset
 import cz.acrobits.libsoftphone.internal.contacts.ContactsUtil
 import cz.acrobits.libsoftphone.support.Listeners
 import cz.acrobits.libsoftphone.support.Listeners.OnCallStateChanged
-import java.util.Objects
 
 class DemoNotificationHandler(private val context: Context, listeners: Listeners) : OnCallStateChanged
 {
@@ -135,15 +133,15 @@ class DemoNotificationHandler(private val context: Context, listeners: Listeners
             // We have an avatar to load - load it asynchronously
             Glide
                 .with(context)
-                .asBitmap()
-                .loadImageAsset(avatarLarge)
-                .into(object : CustomTarget<Bitmap>()
+                .asImageAsset()
+                .load(avatarLarge.toImageAssetDescriptor())
+                .into(object : CustomTarget<Drawable>()
                       {
-                          override fun onResourceReady(res: Bitmap, t: Transition<in Bitmap>?)
+                          override fun onResourceReady(res: Drawable, t: Transition<in Drawable>?)
                           {
                               val updatedPerson = person
                                   .toBuilder()
-                                  .setIcon(IconCompat.createWithBitmap(res))
+                                  .setIcon(IconCompat.createWithBitmap(res.toBitmap()))
                                   .build()
 
                               val updatedStyle: NotificationCompat.Style = NotificationCompat.CallStyle
