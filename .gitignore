@@ -13,7 +13,6 @@ captures/
 .externalNativeBuild/
 .cxx/
 *.apk
-DemoPhone/libs/saas-smoke-libsoftphone-video.aar
 output.json
 
 # IntelliJ
