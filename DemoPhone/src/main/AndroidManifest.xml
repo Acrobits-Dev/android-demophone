@@ -40,6 +40,11 @@
         android:label="@string/app_name"
         android:extractNativeLibs="true">
 
+        <provider android:authorities="${applicationId}.libsoftphone.lifecycle"
+            android:name="cz.acrobits.libsoftphone.support.lifecycle.LifecycleTrackerInitializer"
+            android:exported="false">
+        </provider>
+
         <activity
             android:name=".MainActivity"
             android:label="@string/app_name_short"
