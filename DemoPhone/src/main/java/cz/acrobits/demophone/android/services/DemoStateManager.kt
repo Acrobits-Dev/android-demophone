@@ -1,7 +1,6 @@
 package cz.acrobits.demophone.android.services
 
 import cz.acrobits.libsoftphone.Instance
-import cz.acrobits.libsoftphone.support.TerminateTask
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -20,19 +19,14 @@ class DemoStateManager(private val coroutineScope: CoroutineScope)
         Instance.State.respawn()
     }
 
-    suspend fun terminate() = suspendCancellableCoroutine { continuation ->  
-        val terminateTask = object : TerminateTask() {
-            override fun onTerminated()
-            {
-                continuation.resume(true)
-            }
+    suspend fun terminate() = suspendCancellableCoroutine { continuation ->
+        val handle = Instance.State.requestTermination {
+            continuation.resume(true)
         }
 
-        continuation.invokeOnCancellation { 
-            terminateTask.cancel()
+        continuation.invokeOnCancellation {
+            handle.close()
         }
-
-        terminateTask.execute()
     }
 
     fun restartSdkSync()

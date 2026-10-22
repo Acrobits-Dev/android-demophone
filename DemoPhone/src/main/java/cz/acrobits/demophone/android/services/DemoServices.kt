@@ -38,6 +38,7 @@ class DemoServices private constructor(
 
     val preferences: DemoPreferences
     val listeners: DemoListeners
+    val permissions: DemoPermissionManager
     val eventHandler: DemoEventHandler
     val pushHandler: DemoPushHandler
     val accountManager: DemoAccountManager
@@ -76,8 +77,9 @@ class DemoServices private constructor(
             DemoPreferences(application)
         }
         preferences = Instance.preferences as DemoPreferences
+        permissions = DemoPermissionManager()
 
-        listeners = DemoListeners(application)
+        listeners = DemoListeners(application, permissions)
         Instance.setObserver(listeners)
 
         eventHandler = DemoEventHandler(application, listeners)

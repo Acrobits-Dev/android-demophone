@@ -21,7 +21,7 @@ import cz.acrobits.demophone.android.MainActivity
 import cz.acrobits.demophone.android.R
 import cz.acrobits.libsoftphone.Instance
 import cz.acrobits.libsoftphone.assets.toImageAssetDescriptor
-import cz.acrobits.libsoftphone.contacts.ContactSource
+import cz.acrobits.libsoftphone.contacts.ContactSourceType
 import cz.acrobits.libsoftphone.data.Call
 import cz.acrobits.libsoftphone.data.ResolvedPeerAddress
 import cz.acrobits.libsoftphone.event.CallEvent
@@ -44,13 +44,11 @@ class DemoNotificationHandler(private val context: Context, listeners: Listeners
     {
         notificationManager.cancelAll()
 
-        if (Build.VERSION.SDK_INT >= 26)
-            createNotificationChannels()
+        createNotificationChannels()
 
         listeners.register(this)
     }
 
-    @RequiresApi(26)
     private fun createNotificationChannels()
     {
         val channel = NotificationChannel(
@@ -83,7 +81,7 @@ class DemoNotificationHandler(private val context: Context, listeners: Listeners
         val streamParty = remoteUser.toStreamParty()
 
         var personUri: String? = null
-        if (streamParty.contactId != null && streamParty.contactId.source == ContactSource.ADDRESS_BOOK)
+        if (streamParty.contactId != null && streamParty.contactId.source == ContactSourceType.AddressBook)
             personUri = ContactsUtil.getLookupUri(streamParty.contactId.id)
 
         val eventAddress = if (streamParty.displayName.isNullOrEmpty()) ResolvedPeerAddress(streamParty.currentOriginalTransportUri).humanReadable else streamParty.displayName

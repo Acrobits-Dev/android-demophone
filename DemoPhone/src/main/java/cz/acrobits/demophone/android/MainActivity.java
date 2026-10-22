@@ -11,6 +11,7 @@ import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.graphics.Color;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -30,6 +31,8 @@ import android.widget.TextView;
 import android.widget.Toast;
 import com.bumptech.glide.Glide;
 import com.google.firebase.FirebaseApp;
+
+import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.Timer;
@@ -46,9 +49,8 @@ import cz.acrobits.demophone.android.services.DemoServices;
 import cz.acrobits.libsoftphone.Instance;
 import cz.acrobits.libsoftphone.SDK;
 import cz.acrobits.libsoftphone.VideoInstance;
-import cz.acrobits.libsoftphone.contacts.ContactSource;
+import cz.acrobits.libsoftphone.contacts.ContactSourceType;
 import cz.acrobits.libsoftphone.data.AssetRequest;
-import cz.acrobits.libsoftphone.data.AudioRoute;
 import cz.acrobits.libsoftphone.data.Call;
 import cz.acrobits.libsoftphone.data.CameraInfo;
 import cz.acrobits.libsoftphone.data.ColorRequest;
@@ -59,8 +61,11 @@ import cz.acrobits.libsoftphone.event.StreamParty;
 import cz.acrobits.libsoftphone.glide.GlideImageAssetLoaderExtKt;
 import cz.acrobits.libsoftphone.internal.util.TextChangedListener;
 import cz.acrobits.libsoftphone.permission.Permission;
+import cz.acrobits.libsoftphone.permission.PermissionRequestLauncher;
+import cz.acrobits.libsoftphone.permission.PermissionRequestLauncherOwner;
 import cz.acrobits.libsoftphone.support.Listeners;
-import cz.acrobits.libsoftphone.support.TerminateTask;
+import cz.acrobits.libsoftphone.telecom.AudioEndpoint;
+import cz.acrobits.libsoftphone.telecom.CallType;
 
 /**
  * Main activity for DemoPhone.
@@ -70,12 +75,13 @@ import cz.acrobits.libsoftphone.support.TerminateTask;
 //******************************************************************
 public class MainActivity
         extends Activity
-        implements Listeners.OnAudioRouteChanged,
+        implements Listeners.OnAudioEndpointChanged,
                    Listeners.OnCallHoldStateChanged,
                    Listeners.OnCallStateChanged,
                    Listeners.OnNewCall,
                    Listeners.OnRegistrationErrorMessage,
                    Listeners.OnRegistrationStateChanged,
+                   PermissionRequestLauncherOwner,
                    Runnable,
                    View.OnClickListener,
                    View.OnTouchListener
@@ -88,6 +94,10 @@ public class MainActivity
     public static final String EXTRA_ANSWER_CALL = "answerCall";
 
     public static final String TRANSIENT_FROM_GUI = "from_gui";
+
+    // Contains the permission request launcher for this activity.
+    // This is how you delegate a permission request to the SDK, without having to provide an instance of your activity to the SDK.
+    private final PermissionRequestLauncher mPermissionRequestLauncher = PermissionRequestLauncher.of(this);
 
     /** Generated phone number. */
     private String mNumber;
@@ -135,7 +145,7 @@ public class MainActivity
     private Button mMuteButton;
 
     /** Button to switch the audio route. */
-    private Button mSpeakerButton;
+    private Button mSelectAudioEndpointButton;
 
     /** Button to switch camera. */
     private Button mCameraButton;
@@ -170,11 +180,11 @@ public class MainActivity
     /** Current call. */
     private CallEvent mCall;
 
-    /** Current audio route. */
-    private AudioRoute mRoute;
-
-    /** Audio route switched to after pressing {@link #mSpeakerButton}. */
-    private AudioRoute mNextRoute;
+    @NonNull
+    @Override
+    public PermissionRequestLauncher getPermissionRequestLauncher() {
+        return mPermissionRequestLauncher;
+    }
 
     /**
      * Timer task updating statistics.
@@ -222,7 +232,7 @@ public class MainActivity
         mClearButton = findViewById(R.id.clear);
         mCallButton = findViewById(R.id.call);
         mMuteButton = findViewById(R.id.mute);
-        mSpeakerButton = findViewById(R.id.speaker);
+        mSelectAudioEndpointButton = findViewById(R.id.select_audio_endpoint);
         mCameraButton = findViewById(R.id.camera);
         mLogButton = findViewById(R.id.log);
         mHoldButton = findViewById(R.id.hold);
@@ -241,7 +251,7 @@ public class MainActivity
         mCallButton.setOnClickListener(this);
         mHangUpButton.setOnClickListener(this);
         mMuteButton.setOnClickListener(this);
-        mSpeakerButton.setOnClickListener(this);
+        mSelectAudioEndpointButton.setOnClickListener(this);
         mLogButton.setOnClickListener(this);
         mHoldButton.setOnClickListener(this);
         mPushTestButton.setOnClickListener(this);
@@ -279,9 +289,6 @@ public class MainActivity
         mNumber = DemoServices.instance.getAccountManager().getCurrentNumber().getValue();
         ((TextView) findViewById(R.id.registration_number)).setText(mNumber);
 
-        // Reset the speaker button
-        resetRoute();
-
         LOG.info("Sources: %s", (Object) Instance.Contacts.getSources());
 
         // Start address book synchronization
@@ -293,9 +300,9 @@ public class MainActivity
          * watch for changes in the address book and resync automatically so you don't need to.
          * For SaaS: you need to enable address book contact source in provisioning, see
          *           assets/provisioning.xml. */
-        if (CollectionUtil.contains(Instance.Contacts.getSources(), ContactSource.ADDRESS_BOOK)
+        if (CollectionUtil.contains(Instance.Contacts.getSources(), ContactSourceType.AddressBook)
             && ContextCompat.checkSelfPermission(this, Manifest.permission.READ_CONTACTS) != PackageManager.PERMISSION_GRANTED)
-            Instance.Contacts.ensureValidState(ContactSource.ADDRESS_BOOK);
+            Instance.Contacts.ensureValidState(ContactSourceType.AddressBook);
 
         // Prepare a notification icon
         mNotificationIntent = PendingIntent.getActivity(this, 0,
@@ -315,16 +322,6 @@ public class MainActivity
         NotificationManager nm = Objects.requireNonNull(ContextCompat.getSystemService(this, NotificationManager.class));
         if (Build.VERSION.SDK_INT >= 33 && !nm.areNotificationsEnabled())
             requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, 0);
-        else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && !Settings.canDrawOverlays(this))
-        {
-            AlertDialog.Builder builder = new AlertDialog.Builder(this);
-            builder.setTitle(R.string.permission_needed);
-            builder.setMessage(getString(R.string.ans_call_background_message, getString(R.string.app_name)));
-            builder.setPositiveButton(R.string.grant, (dialog, which) ->
-                startActivity(new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + getPackageName()))));
-            AlertDialog dialog = builder.create();
-            dialog.show();
-        }
 
         mPushTestButton.setVisibility(FirebaseApp
                 .getApps(this).size() == 0 ? View.GONE : View.VISIBLE);
@@ -345,7 +342,7 @@ public class MainActivity
                         AssetRequest.Fit.Contain,
                         null,
                         null,
-                        new ColorRequest.HexColorRequest("#FFFFFF")
+                        ColorRequest.HexColorRequest.Companion.hex(Color.valueOf(Color.parseColor("#FFFFFF")))
                 ));
         AssetRequest assetRequest = new AssetRequest(light, light);
 
@@ -403,18 +400,6 @@ public class MainActivity
     }
 
     /**
-     * Handle back button press.
-     */
-    //******************************************************************
-    @Override
-    public void onBackPressed()
-    //******************************************************************
-    {
-        // Do not finish the activity, just move to background
-        moveTaskToBack(true);
-    }
-
-    /**
      * Handle a click on a button.
      *
      * @param v The button that was clicked on.
@@ -455,7 +440,7 @@ public class MainActivity
                 mNumberView.setText(null);
                 break;
             case R.id.call:
-                callNumber(mNumberView.getText().toString());
+                openCallDialog(mNumberView.getText().toString());
                 break;
             case R.id.hangup:
                 hangup("User interaction");
@@ -463,8 +448,8 @@ public class MainActivity
             case R.id.mute:
                 toggleMute();
                 break;
-            case R.id.speaker:
-                toggleSpeaker();
+            case R.id.select_audio_endpoint:
+                selectAudioEndpointPressed();
                 break;
             case R.id.hold:
                 toggleHold();
@@ -567,10 +552,10 @@ public class MainActivity
      */
     //******************************************************************
     @Override
-    public void onAudioRouteChanged(@Nullable AudioRoute route)
+    public void onAudioEndpointChanged(@Nullable AudioEndpoint endpoint)
     //******************************************************************
     {
-        mRouteView.setText(route == null ? "" : route.name());
+        mRouteView.setText(endpoint == null ? "" : getEndpointName(endpoint));
     }
 
     /**
@@ -595,7 +580,6 @@ public class MainActivity
             mHoldButton.setText(R.string.hold);
             Instance.Calls.close(mCall);
             mCall = null;
-            resetRoute();
             return;
         }
 
@@ -612,7 +596,6 @@ public class MainActivity
                 boolean hasVideo = call.hasAttribute(CallEvent.Attributes.INCOMING_VIDEO) || call.hasAttribute(CallEvent.Attributes.OUTGOING_VIDEO);
                 setAccordingToCall(true, false);
                 updateWindowFlags(true, hasVideo);
-                Instance.Audio.setCallAudioRoute(mRoute);
                 statistics();
                 break;
             default:
@@ -718,7 +701,7 @@ public class MainActivity
     // ******************************************************************
     {
         mCallButton.setEnabled(!inCall && !ringing && mNumberView.getText().length() > 0);
-        mSpeakerButton.setEnabled(inCall);
+        mSelectAudioEndpointButton.setEnabled(inCall);
         mMuteButton.setEnabled(inCall);
         mCameraButton.setEnabled(inCall && Instance.Calls.getDesiredMedia(mCall).outgoingVideoEnabled);
         mHoldButton.setEnabled(inCall);
@@ -763,13 +746,31 @@ public class MainActivity
 
     }
 
+    // ******************************************************************
+    private void openCallDialog(@NonNull String number)
+    // ******************************************************************
+    {
+        String[] names = new String[2];
+        CallType[] callTypes = new CallType[2];
+
+        names[0] = getString(R.string.audio_call);
+        callTypes[0] = CallType.Audio;
+
+        names[1] = getString(R.string.video_call);
+        callTypes[1] = CallType.Video;
+
+        new AlertDialog.Builder(this)
+                .setItems(names, (dialog, which) -> callNumber(number, callTypes[which]))
+                .show();
+    }
+
     /**
      * Call a number.
      *
      * @param number The number to call.
      */
     // ******************************************************************
-    private void callNumber(@NonNull String number)
+    private void callNumber(@NonNull String number, @NonNull CallType callType)
     // ******************************************************************
     {
         if (TextUtils.isEmpty(number))
@@ -779,9 +780,7 @@ public class MainActivity
             Instance.Calls.close(mCall);
 
         mCall = new CallEvent(new StreamParty(number).match(mAccountId).toRemoteUser());
-        mCall.transients.put(CallEvent.Transients.DIAL_ACTION,
-                             CollectionUtil.contains(SDK.features, SDK.Feature.Video)
-                                     ? DialAction.VIDEO_CALL.id : DialAction.VOICE_CALL.id);
+        mCall.transients.put(CallEvent.Transients.DIAL_ACTION, getDialActionTransient(callType));
         int res = Instance.Events.post(mCall);
         if (res != Instance.Events.PostResult.SUCCESS)
         {
@@ -792,6 +791,26 @@ public class MainActivity
         mContactView.setText(number);
         statistics();
     }
+
+    /**
+     * Pick which call action to use for a call, based on the call type and whether video is supported.
+     * @param callType The desired call type (audio or video).
+     * @return The dial action to use for the call.
+     */
+    // ******************************************************************
+    private String getDialActionTransient(@NonNull CallType callType)
+    // ******************************************************************
+    {
+        if (!CollectionUtil.contains(SDK.features, SDK.Feature.Video))
+            return DialAction.VOICE_CALL.id;
+
+        return switch (callType)
+        {
+            case Audio -> DialAction.VOICE_CALL.id;
+            case Video -> DialAction.VIDEO_CALL.id;
+        };
+    }
+        
 
     /**
      * Hang up.
@@ -818,66 +837,27 @@ public class MainActivity
     }
 
     /**
-     * Reset the audio route.
-     * <p>
-     * The default audio route is {@link AudioRoute#BluetoothSCO} if
-     * Bluetooth headset is available, or {@link AudioRoute#Receiver}
-     * otherwise.
-     */
-    // ******************************************************************
-    private void resetRoute()
-    // ******************************************************************
-    {
-        mRoute = CollectionUtil.contains(Instance.Audio.getAvailableCallAudioRoutes(), AudioRoute.BluetoothSCO)
-                ? AudioRoute.BluetoothSCO
-                : AudioRoute.Receiver;
-        Instance.Audio.setCallAudioRoute(mRoute);
-        mNextRoute = getNextRoute(mRoute);
-        mSpeakerButton.setText(mNextRoute.name());
-        onAudioRouteChanged(Instance.Audio.getCallAudioRoute());
-    }
-
-    /**
-     * Get next audio route.
-     * <p>
-     * This methods switch through all available audio routes.
-     *
-     * @param route The route to get the next audio route for.
-     * @return The next audio route.
-     */
-    // ******************************************************************
-    private @NonNull
-    AudioRoute getNextRoute(@NonNull AudioRoute route)
-    // ******************************************************************
-    {
-        switch (route)
-        {
-            case Speaker:
-                return AudioRoute.Receiver;
-            case Receiver:
-            case Headset:
-                return CollectionUtil.contains(Instance.Audio.getAvailableCallAudioRoutes(),
-                                            AudioRoute.BluetoothSCO)
-                        ? AudioRoute.BluetoothSCO
-                        : AudioRoute.Speaker;
-            case BluetoothSCO:
-            case BluetoothA2DP:
-                return AudioRoute.Speaker;
-        }
-        return route;
-    }
-
-    /**
      * Switch the audio route.
      */
     // ******************************************************************
-    private void toggleSpeaker()
+    private void selectAudioEndpointPressed()
     // ******************************************************************
     {
-        mRoute = mNextRoute;
-        mNextRoute = getNextRoute(mRoute);
-        Instance.Audio.setCallAudioRoute(mRoute);
-        mSpeakerButton.setText(mNextRoute.name());
+        if (mCall == null)
+            return;
+
+        List<AudioEndpoint> endpoints = Instance.Audio.getAvailableCallAudioEndpoints().getValue();
+        if (endpoints.isEmpty())
+            return;
+
+        String[] names = new String[endpoints.size()];
+        for (int i = 0; i < endpoints.size(); ++i)
+            names[i] = getEndpointName(endpoints.get(i));
+
+        new AlertDialog.Builder(this)
+                .setTitle(R.string.select_audio_endpoint)
+                .setItems(names, (dialog, which) -> Instance.Audio.setCallAudioEndpoint(endpoints.get(which)))
+                .show();
     }
 
     /**
@@ -949,22 +929,12 @@ public class MainActivity
     private void exitApp()
     // ******************************************************************
     {
-        if (mCall != null && !mCall.isClosed())
-        {
-            Call.State state = Instance.Calls.getState(mCall);
-            if (state == Call.State.IncomingTrying
-                || state == Call.State.IncomingRinging)
-                Instance.Calls.rejectIncomingHere(mCall);
-            else
-                Instance.Calls.hangup(mCall, null);
-        }
+        if (Instance.State.isTerminating())
+            return;
 
-        Instance.Registration.deleteAccount(mAccountId);
-
-        //Terminate the SDK
-        new TerminateTask().execute();
-
-        finish();
+        // Terminate the SDK
+        //noinspection resource
+        Instance.State.requestTermination(this::finish);
     }
 
     /**
@@ -1007,7 +977,7 @@ public class MainActivity
                                            @NonNull int[] results)
     // ******************************************************************
     {
-        Permission.onRequestPermissionResult(requestCode, permissions, results);
+        Permission.onRequestPermissionResult(this, requestCode, permissions, results);
     }
 
     // ******************************************************************
@@ -1034,5 +1004,38 @@ public class MainActivity
         Intent intent = getMainActivityIntent(context, eventId)
                 .putExtra(EXTRA_ANSWER_CALL, true);
         context.startActivity(intent);
+    }
+
+    // ******************************************************************
+    @Override
+    protected void onResume()
+    // ******************************************************************
+    {
+        super.onResume();
+        DemoServices.instance.getPermissions().notifyOwnerAvailable(this);
+    }
+
+    // ******************************************************************
+    @Override
+    protected void onStop()
+    // ******************************************************************
+    {
+        super.onStop();
+        DemoServices.instance.getPermissions().notifyOwnerUnavailable(this);
+    }
+
+    // ******************************************************************
+    private String getEndpointName(@NonNull AudioEndpoint endpoint)
+    // ******************************************************************
+    {
+        return switch (endpoint.getType()) {
+            case Unknown -> getString(R.string.audio_endpoint_unknown);
+            case Receiver -> getString(R.string.audio_endpoint_receiver);
+            case Speaker -> getString(R.string.audio_endpoint_speaker);
+            case Bluetooth ->
+                    endpoint.getName() != null ? endpoint.getName() : getString(R.string.audio_endpoint_bluetooth);
+            case Headset -> getString(R.string.audio_endpoint_headset);
+            case Streaming -> getString(R.string.audio_endpoint_audio_stream);
+        };
     }
 }

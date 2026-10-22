@@ -12,6 +12,7 @@
 	<string name="clear">×</string>
 	<string name="hangup">Hang Up</string>
 	<string name="mute">Mute</string>
+    <string name="select_audio_endpoint">Audio output</string>
 	<string name="unmute">Unmute</string>
 	<string name="hold">Hold</string>
 	<string name="unhold">Unhold</string>
@@ -22,6 +23,8 @@
 	<string name="agc">AGC</string>
 	<string name="push_test">Push test</string>
 	<string name="exit_app">Exit</string>
+    <string name="audio_call">Audio call</string>
+    <string name="video_call">Video call</string>
 
 	<string name="registration_state">State:</string>
 	<string name="registration_number">Number:</string>
@@ -36,8 +39,11 @@
 
 	<string name="notification_call_incoming">Incoming call</string>
 	<string name="dismiss">Dismiss</string>
-
-	<string name="grant">Grant</string>
-	<string name="permission_needed">Permission needed</string>
-	<string name="ans_call_background_message">To answer push call when the app is in background, you have to grant %1$s the Display over other apps permission.</string>
+    
+    <string name="audio_endpoint_unknown">Unknown</string>
+    <string name="audio_endpoint_receiver">Receiver</string>
+    <string name="audio_endpoint_speaker">Speaker</string>
+    <string name="audio_endpoint_bluetooth">Bluetooth</string>
+    <string name="audio_endpoint_headset">Headset</string>
+    <string name="audio_endpoint_audio_stream">Audio Stream</string>
 </resources>

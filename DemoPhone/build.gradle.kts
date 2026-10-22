@@ -1,3 +1,5 @@
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -28,8 +30,8 @@ android {
     }
 
     defaultConfig {
-        minSdk = 24
-        targetSdk = 35
+        minSdk = 26
+        targetSdk = 36
         applicationId = acrobits_saas_package
         versionCode = 1
         versionName = "DEMO"
@@ -43,9 +45,11 @@ android {
             useLegacyPackaging = true
         }
     }
+}
 
-    kotlinOptions {
-        jvmTarget = "17"
+kotlin {
+    compilerOptions {
+        jvmTarget = JvmTarget.JVM_17
     }
 }
 
